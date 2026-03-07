@@ -8,3 +8,6 @@ coverage
 .cache
 .DS_Store
 *.log
+.venv-doc
+services/cre-workflow/cre/omni-yield/.cre_build_tmp.js
+services/cre-workflow/cre/omni-yield/node_modules/
