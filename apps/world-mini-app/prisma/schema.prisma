@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model WorldIdProof {
+  id                String   @id @default(cuid())
+  nullifierHash     String   @unique
+  signal            String
+  verificationLevel String
+  createdAt         DateTime @default(now())
+
+  sessions UserSession[]
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  walletAddress String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  proofId String?
+  proof   WorldIdProof? @relation(fields: [proofId], references: [id], onDelete: SetNull)
+
+  @@index([walletAddress])
+  @@index([expiresAt])
+}
+
+model PositionSnapshot {
+  id           String   @id @default(cuid())
+  walletAddress String
+  totalAssets  String
+  activeChain  String
+  aprBps       Int
+  createdAt    DateTime @default(now())
+
+  @@index([walletAddress, createdAt])
+}
+
+model VaultEvent {
+  id        String   @id @default(cuid())
+  chain     String
+  txHash    String   @unique
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([eventType, createdAt])
+}
+
+model RebalanceAction {
+  id          String   @id @default(cuid())
+  targetChain String
+  triggeredBy String
+  status      String
+  txHash      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
