@@ -1,0 +1,22 @@
+{
+  "name": "yield-cre",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-chain yield optimizer mini-app using Chainlink CRE + CCIP",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*",
+    "contracts"
+  ],
+  "scripts": {
+    "dev:mini-app": "npm run dev -w @yield-cre/world-mini-app",
+    "dev:workflow": "npm run dev -w @yield-cre/cre-workflow",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

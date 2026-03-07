@@ -1,0 +1,12 @@
+{
+  "name": "@yield-cre/cre-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "echo 'Build not configured yet'",
+    "lint": "echo 'Lint not configured yet'",
+    "test": "echo 'Tests not configured yet'"
+  }
+}

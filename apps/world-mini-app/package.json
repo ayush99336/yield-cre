@@ -1,0 +1,12 @@
+{
+  "name": "@yield-cre/world-mini-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'Mini App scaffold ready. Add Next.js or Vite setup next.'",
+    "build": "echo 'Build not configured yet'",
+    "lint": "echo 'Lint not configured yet'",
+    "test": "echo 'Tests not configured yet'"
+  }
+}
