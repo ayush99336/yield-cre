@@ -8,5 +8,16 @@
     "build": "echo 'Build not configured yet'",
     "lint": "echo 'Lint not configured yet'",
     "test": "echo 'Tests not configured yet'"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "^1.1.4",
+    "dotenv": "^17.3.1",
+    "viem": "^2.47.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5"
   }
 }
