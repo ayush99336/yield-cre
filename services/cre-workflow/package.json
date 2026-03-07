@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node src/index.js",
+    "cre:simulate": "cd cre && ~/.cre/bin/cre workflow simulate omni-yield",
+    "cre:simulate:staging": "cd cre && ~/.cre/bin/cre -T staging-settings workflow simulate omni-yield",
+    "cre:simulate:production": "cd cre && ~/.cre/bin/cre -T production-settings workflow simulate omni-yield",
     "build": "echo 'Build not configured yet'",
     "lint": "echo 'Lint not configured yet'",
     "test": "echo 'Tests not configured yet'"

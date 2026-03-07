@@ -17,11 +17,11 @@
 default: &default
   rpcs:
     - chain-name: ethereum-mainnet
-      url: https://ethereum.publicnode.com/
+      url: https://eth-mainnet.g.alchemy.com/v2/rSom9gy6O71FztLJrWkrI
     - chain-name: ethereum-testnet-sepolia
-      url: https://ethereum-sepolia-rpc.publicnode.com
+      url: https://eth-sepolia.g.alchemy.com/v2/rSom9gy6O71FztLJrWkrI
     - chain-name: ethereum-testnet-sepolia-base-1
-      url: https://base-sepolia-rpc.publicnode.com
+      url: https://base-sepolia.g.alchemy.com/v2/rSom9gy6O71FztLJrWkrI
 
 staging-settings: *default
 

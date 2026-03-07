@@ -12,6 +12,7 @@
   "scripts": {
     "dev:mini-app": "npm run dev -w @yield-cre/world-mini-app",
     "dev:workflow": "npm run dev -w @yield-cre/cre-workflow",
+    "simulate:cre": "npm run cre:simulate -w @yield-cre/cre-workflow",
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces"

@@ -15,6 +15,7 @@ Cross-chain yield optimizer scaffold for a World Mini App that uses Chainlink CR
 npm install
 npm run dev:workflow
 npm run dev:mini-app
+npm run simulate:cre
 ```
 
 ## Next implementation steps
