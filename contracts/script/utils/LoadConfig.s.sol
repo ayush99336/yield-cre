@@ -17,7 +17,11 @@ abstract contract LoadConfig is Script {
         return mode;
     }
 
-    function homeChainConfig() internal view returns (ChainConfig.HomeChainConfig memory) {
-        return ChainConfig.getHomeChainConfig(homeChainMode());
+    function homeChainConfig() internal view returns (ChainConfig.HomeChainConfig memory cfg) {
+        cfg = ChainConfig.getHomeChainConfig(homeChainMode());
+        address overrideRouter = vm.envOr("HOME_ROUTER_OVERRIDE", address(0));
+        if (overrideRouter != address(0)) {
+            cfg.ccipRouter = overrideRouter;
+        }
     }
 }
