@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "echo 'Contracts scaffold ready. Add Foundry or Hardhat next.'",
-    "build": "echo 'Build not configured yet'",
-    "lint": "echo 'Lint not configured yet'",
-    "test": "echo 'Tests not configured yet'"
+    "dev": "forge script script/Deploy.s.sol --rpc-url ${ETH_SEPOLIA_RPC_URL:-http://localhost:8545} --broadcast --private-key ${DEPLOYER_PRIVATE_KEY:-0x00}",
+    "build": "forge build",
+    "lint": "forge fmt --check",
+    "test": "forge test"
   },
   "dependencies": {
     "@chainlink/contracts": "^1.5.0",

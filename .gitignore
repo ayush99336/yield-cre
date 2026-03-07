@@ -11,3 +11,6 @@ coverage
 .venv-doc
 services/cre-workflow/cre/omni-yield/.cre_build_tmp.js
 services/cre-workflow/cre/omni-yield/node_modules/
+contracts/cache/
+contracts/out/
+contracts/broadcast/
