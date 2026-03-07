@@ -14,3 +14,4 @@ services/cre-workflow/cre/omni-yield/node_modules/
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+apps/world-mini-app/.next/
