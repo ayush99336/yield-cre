@@ -1,125 +1,171 @@
-import { describe, expect } from 'bun:test'
-import { cre, getNetwork } from '@chainlink/cre-sdk'
-import { EvmMock, newTestRuntime, test } from '@chainlink/cre-sdk/test'
-import { getAddress, type Address } from 'viem'
-import { MockPool } from '../contracts/evm/ts/generated/MockPool'
-import { newMockPoolMock } from '../contracts/evm/ts/generated/MockPool_mock'
-import { initWorkflow, onCronTrigger } from './workflow'
+import { describe, expect, test } from 'bun:test'
+import { newTestRuntime } from '@chainlink/cre-sdk/test'
 
-const CHAIN_SELECTOR = 16015286601757825753n // ethereum-testnet-sepolia
-const POOL_ADDRESS = getAddress('0x6ae43d3271ff6888e7fc43fd7321a503ff738951')
-const USDC_ASSET = getAddress('0x1f9840a85d5af5bf1d1762f925bdaddc4201f984')
-const PROTOCOL_WALLET = getAddress('0x7109709ecfa91a80626ff3989d68f67f5b1dd12d')
-const ATOKEN_ADDRESS = getAddress('0xbcf7c21f0b2f4114b5c764b064b97df773c93b44')
-const DEBT_TOKEN_ADDRESS = getAddress('0xd5c3e3b477a458bfd721ca957d6978f4e71b9f23')
-const VARIABLE_DEBT_ADDRESS = getAddress('0x3e0437898a5667a4769b1ca5a34aab1ae7e81377')
-const INTEREST_RATE_STRATEGY = getAddress('0xa9f3c3cae095527061e6d270dbe163693e6fda9d')
+import { computeRebalanceDecision, onCronTrigger } from './workflow'
 
-describe('onCronTrigger', () => {
-	test('reads lending pool reserve data and current liquidity rate', async () => {
-		const evmMock = EvmMock.testInstance(CHAIN_SELECTOR)
-		const mockPoolMock = newMockPoolMock(POOL_ADDRESS, evmMock)
-		mockPoolMock.getReserveData = () => ({
-			configuration: { data: 0n },
-			liquidityIndex: 0n,
-			currentLiquidityRate: 1n * 10n ** 27n, // 1 RAY
-			variableBorrowIndex: 0n,
-			currentVariableBorrowRate: 0n,
-			currentStableBorrowRate: 0n,
-			lastUpdateTimestamp: 0,
-			id: 0,
-			aTokenAddress: ATOKEN_ADDRESS,
-			stableDebtTokenAddress: DEBT_TOKEN_ADDRESS,
-			variableDebtTokenAddress: VARIABLE_DEBT_ADDRESS,
-			interestRateStrategyAddress: INTEREST_RATE_STRATEGY,
-			accruedToTreasury: 0n,
-			unbacked: 0n,
-			isolationModeTotalDebt: 0n,
-		})
+describe('computeRebalanceDecision', () => {
+  test('skips when best chain is already current', () => {
+    const decision = computeRebalanceDecision({
+      snapshots: [
+        { id: 'polygonAmoy', chainName: 'polygon-testnet-amoy', aprRay: 60n, aprBps: 60n, lastUpdateTimestamp: 100 },
+        { id: 'arbitrumSepolia', chainName: 'ethereum-testnet-sepolia-arbitrum-1', aprRay: 50n, aprBps: 50n, lastUpdateTimestamp: 100 },
+      ],
+      currentYieldChain: 'polygonAmoy',
+      thresholdBps: 50,
+      cooldownSeconds: 600,
+      nowSeconds: 10_000,
+    })
 
-		const runtime = newTestRuntime()
-		const network = getNetwork({
-			chainFamily: 'evm',
-			chainSelectorName: 'ethereum-testnet-sepolia',
-			isTestnet: true,
-		})
-		expect(network).toBeDefined()
-		if (!network) return
+    expect(decision.kind).toBe('skip')
+    if (decision.kind === 'skip') {
+      expect(decision.reason).toBe('already-best-chain')
+    }
+  })
 
-		const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector)
-		const pool = new MockPool(evmClient, POOL_ADDRESS)
-		const reserveData = pool.getReserveData(runtime, USDC_ASSET)
-		expect(reserveData.currentLiquidityRate).toBe(10n ** 27n)
-	})
+  test('skips when APR gap is below threshold', () => {
+    const decision = computeRebalanceDecision({
+      snapshots: [
+        { id: 'polygonAmoy', chainName: 'polygon-testnet-amoy', aprRay: 110n, aprBps: 110n, lastUpdateTimestamp: 1 },
+        { id: 'arbitrumSepolia', chainName: 'ethereum-testnet-sepolia-arbitrum-1', aprRay: 100n, aprBps: 100n, lastUpdateTimestamp: 1 },
+      ],
+      currentYieldChain: 'arbitrumSepolia',
+      thresholdBps: 20,
+      cooldownSeconds: 60,
+      nowSeconds: 10_000,
+    })
 
-	test('reads token balance in lending pool for protocol wallet', async () => {
-		const evmMock = EvmMock.testInstance(CHAIN_SELECTOR)
-		const mockPoolMock = newMockPoolMock(POOL_ADDRESS, evmMock)
-		mockPoolMock.balanceOf = () => 5000000000000000000n
+    expect(decision.kind).toBe('skip')
+    if (decision.kind === 'skip') {
+      expect(decision.reason).toBe('below-threshold')
+    }
+  })
 
-		const runtime = newTestRuntime()
-		const network = getNetwork({
-			chainFamily: 'evm',
-			chainSelectorName: 'ethereum-testnet-sepolia',
-			isTestnet: true,
-		})
-		expect(network).toBeDefined()
-		if (!network) return
+  test('skips when cooldown is active', () => {
+    const decision = computeRebalanceDecision({
+      snapshots: [
+        { id: 'polygonAmoy', chainName: 'polygon-testnet-amoy', aprRay: 200n, aprBps: 200n, lastUpdateTimestamp: 9_900 },
+        { id: 'arbitrumSepolia', chainName: 'ethereum-testnet-sepolia-arbitrum-1', aprRay: 100n, aprBps: 100n, lastUpdateTimestamp: 9_900 },
+      ],
+      currentYieldChain: 'arbitrumSepolia',
+      thresholdBps: 50,
+      cooldownSeconds: 500,
+      nowSeconds: 10_000,
+    })
 
-		const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector)
-		const pool = new MockPool(evmClient, POOL_ADDRESS)
-		const balance = pool.balanceOf(runtime, PROTOCOL_WALLET, USDC_ASSET)
-		expect(balance).toBe(5000000000000000000n)
-	})
+    expect(decision.kind).toBe('skip')
+    if (decision.kind === 'skip') {
+      expect(decision.reason).toBe('cooldown-active')
+    }
+  })
 
-	test('throws when scheduledExecutionTime is missing', () => {
-		const runtime = newTestRuntime()
-		expect(() => onCronTrigger(runtime as any, {} as any)).toThrow(
-			'Scheduled execution time is required',
-		)
-	})
+  test('returns rebalance decision when all checks pass', () => {
+    const decision = computeRebalanceDecision({
+      snapshots: [
+        { id: 'polygonAmoy', chainName: 'polygon-testnet-amoy', aprRay: 300n, aprBps: 300n, lastUpdateTimestamp: 1 },
+        { id: 'arbitrumSepolia', chainName: 'ethereum-testnet-sepolia-arbitrum-1', aprRay: 100n, aprBps: 100n, lastUpdateTimestamp: 1 },
+      ],
+      currentYieldChain: 'arbitrumSepolia',
+      thresholdBps: 50,
+      cooldownSeconds: 60,
+      nowSeconds: 10_000,
+    })
 
-	test('throws when fewer than 2 EVM chains are configured', () => {
-		const runtime = newTestRuntime()
-		;(runtime as any).config = {
-			schedule: '0 */10 * * * *',
-			minBPSDeltaForRebalance: 50,
-			evms: [
-				{
-					assetAddress: USDC_ASSET,
-					poolAddress: POOL_ADDRESS,
-					protocolSmartWalletAddress: PROTOCOL_WALLET,
-					chainName: 'ethereum-testnet-sepolia',
-					gasLimit: '500000',
-				},
-			],
-		}
-		expect(() =>
-			onCronTrigger(runtime as any, { scheduledExecutionTime: Date.now() } as any),
-		).toThrow('At least two EVM configurations are required')
-	})
+    expect(decision.kind).toBe('rebalance')
+    if (decision.kind === 'rebalance') {
+      expect(decision.targetChain).toBe('polygonAmoy')
+      expect(decision.diffBps).toBe(200n)
+    }
+  })
+
+  test('skips when current chain is not in snapshots', () => {
+    const decision = computeRebalanceDecision({
+      snapshots: [
+        { id: 'polygonAmoy', chainName: 'polygon-testnet-amoy', aprRay: 150n, aprBps: 150n, lastUpdateTimestamp: 1 },
+        { id: 'arbitrumSepolia', chainName: 'ethereum-testnet-sepolia-arbitrum-1', aprRay: 120n, aprBps: 120n, lastUpdateTimestamp: 1 },
+      ],
+      currentYieldChain: 'unknownChain',
+      thresholdBps: 20,
+      cooldownSeconds: 60,
+      nowSeconds: 10_000,
+    })
+
+    expect(decision.kind).toBe('skip')
+    if (decision.kind === 'skip') {
+      expect(decision.reason).toBe('current-chain-not-enabled')
+    }
+  })
 })
 
-describe('initWorkflow', () => {
-	test('subscribes onCronTrigger to the configured cron schedule', () => {
-		const config = {
-			schedule: '0 */10 * * * *',
-			minBPSDeltaForRebalance: 50,
-			evms: [
-				{
-					assetAddress: USDC_ASSET,
-					poolAddress: POOL_ADDRESS,
-					protocolSmartWalletAddress: PROTOCOL_WALLET,
-					chainName: 'ethereum-testnet-sepolia',
-					gasLimit: '500000',
-				},
-			],
-		}
-		const handlers = initWorkflow(config)
+describe('onCronTrigger guards', () => {
+  test('throws when scheduledExecutionTime is missing', () => {
+    const runtime = newTestRuntime()
+    ;(runtime as any).config = {
+      schedule: '*/10 * * * *',
+      rebalanceThresholdBps: 50,
+      cooldownSeconds: 1800,
+      homeChainName: 'ethereum-testnet-sepolia',
+      homeVaultAddress: '0x1111111111111111111111111111111111111111',
+      homeVaultWriteGasLimit: '500000',
+      chains: [
+        {
+          id: 'polygonAmoy',
+          chainName: 'polygon-testnet-amoy',
+          usdc: '0x1',
+          dataProvider: '0x2',
+          pool: '0x3',
+          receiver: '0x4',
+          enabled: true,
+        },
+        {
+          id: 'arbitrumSepolia',
+          chainName: 'ethereum-testnet-sepolia-arbitrum-1',
+          usdc: '0x11',
+          dataProvider: '0x12',
+          pool: '0x13',
+          receiver: '0x14',
+          enabled: true,
+        },
+      ],
+    }
 
-		expect(handlers).toHaveLength(1)
-		expect(handlers[0].fn).toBe(onCronTrigger)
-		const cronTrigger = handlers[0].trigger as { config?: { schedule?: string } }
-		expect(cronTrigger.config?.schedule).toBe(config.schedule)
-	})
+    expect(() => onCronTrigger(runtime as any, {} as any)).toThrow(
+      'Scheduled execution time is required',
+    )
+  })
+
+  test('throws when fewer than 2 chains are enabled', () => {
+    const runtime = newTestRuntime()
+    ;(runtime as any).config = {
+      schedule: '*/10 * * * *',
+      rebalanceThresholdBps: 50,
+      cooldownSeconds: 1800,
+      homeChainName: 'ethereum-testnet-sepolia',
+      homeVaultAddress: '0x1111111111111111111111111111111111111111',
+      homeVaultWriteGasLimit: '500000',
+      chains: [
+        {
+          id: 'polygonAmoy',
+          chainName: 'polygon-testnet-amoy',
+          usdc: '0x1',
+          dataProvider: '0x2',
+          pool: '0x3',
+          receiver: '0x4',
+          enabled: true,
+        },
+        {
+          id: 'arbitrumSepolia',
+          chainName: 'ethereum-testnet-sepolia-arbitrum-1',
+          usdc: '0x11',
+          dataProvider: '0x12',
+          pool: '0x13',
+          receiver: '0x14',
+          enabled: false,
+        },
+      ],
+    }
+
+    expect(() =>
+      onCronTrigger(runtime as any, { scheduledExecutionTime: Date.now() } as any),
+    ).toThrow('At least two enabled chains are required')
+  })
 })

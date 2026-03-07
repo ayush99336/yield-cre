@@ -34,6 +34,18 @@ type ChainSnapshot = {
   lastUpdateTimestamp: number
 }
 
+type DecisionInput = {
+  snapshots: ChainSnapshot[]
+  currentYieldChain: string
+  thresholdBps: number
+  cooldownSeconds: number
+  nowSeconds: number
+}
+
+export type RebalanceDecision =
+  | { kind: 'skip'; reason: string }
+  | { kind: 'rebalance'; targetChain: string; diffBps: bigint }
+
 const RAY_TO_BPS_DIVISOR = 100000000000000000000000n // 1e23
 
 const aprRayToBps = (aprRay: bigint): bigint => aprRay / RAY_TO_BPS_DIVISOR
@@ -101,6 +113,36 @@ const findBestSnapshot = (snapshots: ChainSnapshot[]): ChainSnapshot => {
   return best
 }
 
+export const computeRebalanceDecision = ({
+  snapshots,
+  currentYieldChain,
+  thresholdBps,
+  cooldownSeconds,
+  nowSeconds,
+}: DecisionInput): RebalanceDecision => {
+  const best = findBestSnapshot(snapshots)
+  if (currentYieldChain === best.id) {
+    return { kind: 'skip', reason: 'already-best-chain' }
+  }
+
+  const current = snapshots.find((s) => s.id === currentYieldChain)
+  if (!current) {
+    return { kind: 'skip', reason: 'current-chain-not-enabled' }
+  }
+
+  const diffBps = best.aprBps - current.aprBps
+  if (diffBps < BigInt(thresholdBps)) {
+    return { kind: 'skip', reason: 'below-threshold' }
+  }
+
+  const cooldownElapsed = nowSeconds - current.lastUpdateTimestamp
+  if (cooldownElapsed < cooldownSeconds) {
+    return { kind: 'skip', reason: 'cooldown-active' }
+  }
+
+  return { kind: 'rebalance', targetChain: best.id, diffBps }
+}
+
 export const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): string => {
   if (!payload.scheduledExecutionTime) {
     throw new Error('Scheduled execution time is required')
@@ -128,41 +170,30 @@ export const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): s
   }
   runtime.log(`Current vault chain=${currentYieldChain}`)
 
-  if (currentYieldChain === best.id) {
-    runtime.log('Best chain already active; no rebalance needed.')
-    return ''
-  }
-
-  const current = snapshots.find((s) => s.id === currentYieldChain)
-  if (!current) {
-    runtime.log(`Current chain ${currentYieldChain} not in enabled chain list; skipping this cycle.`)
-    return ''
-  }
-
-  const diffBps = best.aprBps - current.aprBps
-  runtime.log(`APR diff bps=${diffBps}, threshold=${runtime.config.rebalanceThresholdBps}`)
-  if (diffBps < BigInt(runtime.config.rebalanceThresholdBps)) {
-    runtime.log('APR diff below threshold; skipping rebalance.')
-    return ''
-  }
-
   const nowSeconds = scheduledTimeToSeconds(payload.scheduledExecutionTime)
-  const cooldownElapsed = nowSeconds - current.lastUpdateTimestamp
-  runtime.log(`Cooldown elapsed=${cooldownElapsed}s, required=${runtime.config.cooldownSeconds}s`)
-  if (cooldownElapsed < runtime.config.cooldownSeconds) {
-    runtime.log('Cooldown still active; skipping rebalance.')
+  const decision = computeRebalanceDecision({
+    snapshots,
+    currentYieldChain,
+    thresholdBps: runtime.config.rebalanceThresholdBps,
+    cooldownSeconds: runtime.config.cooldownSeconds,
+    nowSeconds,
+  })
+  if (decision.kind === 'skip') {
+    runtime.log(`Skipping rebalance: ${decision.reason}`)
     return ''
   }
 
   const writeResp = vault.writeReportFromInitiateRebalance(
     runtime,
-    best.id,
+    decision.targetChain,
     { gasLimit: runtime.config.homeVaultWriteGasLimit },
   )
   if (writeResp.txStatus !== TxStatus.SUCCESS) {
     throw new Error(`initiateRebalance failed: ${writeResp.errorMessage || writeResp.txStatus}`)
   }
-  runtime.log(`Rebalance tx submitted successfully. targetChain=${best.id}`)
+  runtime.log(
+    `Rebalance tx submitted successfully. targetChain=${decision.targetChain} diffBps=${decision.diffBps}`,
+  )
 
   return ''
 }
