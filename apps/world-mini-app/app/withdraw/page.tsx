@@ -1,9 +1,11 @@
 'use client'
 
-import { MiniKit } from '@worldcoin/minikit-js'
+import { Command, MiniKit, isCommandAvailable } from '@worldcoin/minikit-js'
 import { useState } from 'react'
+import { parseUnits } from 'viem'
 
-import { homeVaultAddress, vaultAbi } from '@/src/lib/vault'
+import { env } from '@/src/lib/env'
+import { homeVaultAddress, isHomeVaultConfigured, vaultAbi } from '@/src/lib/vault'
 import { useAppStore } from '@/src/lib/store'
 
 export default function WithdrawPage() {
@@ -11,31 +13,71 @@ export default function WithdrawPage() {
   const [error, setError] = useState('')
   const { txStatus, setTxStatus } = useAppStore()
 
+  const canUseMiniKitTx = () => {
+    try {
+      return MiniKit.isInstalled() && isCommandAvailable(Command.SendTransaction)
+    } catch {
+      return false
+    }
+  }
+
+  const simulateTxLifecycle = () => {
+    setTxStatus('ccip_pending')
+    setTimeout(() => setTxStatus('settled'), 1200)
+  }
+
   async function submitWithdraw() {
     setError('')
-    setTxStatus('submitted')
+    setTxStatus('signing')
 
     try {
-      const shareUnits = BigInt(Math.floor(Number(amount) * 1_000_000))
-      const { finalPayload } = await MiniKit.commandsAsync.sendTransaction({
-        transaction: [
-          {
-            address: homeVaultAddress,
-            abi: vaultAbi,
-            functionName: 'withdraw',
-            args: [shareUnits],
-          },
-        ],
-      })
+      if (!isHomeVaultConfigured) {
+        throw new Error(
+          'Vault is not configured. Set NEXT_PUBLIC_HOME_VAULT_ADDRESS to your deployed YieldVault address.',
+        )
+      }
 
-      if (finalPayload.status !== 'success') {
-        setTxStatus('failed')
-        setError(finalPayload.error_code)
+      const parsedAmount = Number(amount)
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        throw new Error('Enter a valid share amount greater than 0')
+      }
+
+      const shareUnits = parseUnits(amount, 6)
+
+      if (canUseMiniKitTx()) {
+        const { finalPayload } = await MiniKit.commandsAsync.sendTransaction({
+          transaction: [
+            {
+              address: homeVaultAddress,
+              abi: vaultAbi,
+              functionName: 'withdraw',
+              args: [shareUnits],
+            },
+          ],
+        })
+
+        if (finalPayload.status !== 'success') {
+          setTxStatus('failed')
+          setError(
+            finalPayload.error_code === 'simulation_failed'
+              ? 'Simulation failed: check your share balance and vault configuration.'
+              : finalPayload.error_code,
+          )
+          return
+        }
+
+        setTxStatus('submitted')
         return
       }
 
-      setTxStatus('ccip_pending')
-      setTimeout(() => setTxStatus('settled'), 1200)
+      if (env.worldIdDevBypass) {
+        simulateTxLifecycle()
+        return
+      }
+
+      throw new Error(
+        "MiniKit 'send-transaction' command is unavailable. Open in World App, or enable NEXT_PUBLIC_WORLD_ID_DEV_BYPASS=true for desktop testing.",
+      )
     } catch (e) {
       setTxStatus('failed')
       setError(e instanceof Error ? e.message : 'withdraw failed')
@@ -45,7 +87,10 @@ export default function WithdrawPage() {
   return (
     <main className="mx-auto min-h-screen max-w-xl px-6 py-10">
       <h1 className="text-3xl font-semibold">Withdraw</h1>
-      <p className="mt-2 text-sm text-muted">Calls `YieldVault.withdraw()` and tracks CCIP return lifecycle.</p>
+      <p className="mt-2 text-sm text-muted">
+        Calls `YieldVault.withdraw()` and tracks CCIP return lifecycle; uses simulated lifecycle in dev
+        bypass mode.
+      </p>
 
       <div className="mt-6 grid gap-3">
         <input

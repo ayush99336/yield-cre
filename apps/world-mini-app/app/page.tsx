@@ -1,9 +1,10 @@
 'use client'
 
-import { MiniKit } from '@worldcoin/minikit-js'
+import { Command, MiniKit, VerificationLevel, isCommandAvailable } from '@worldcoin/minikit-js'
 import Link from 'next/link'
 import { useState } from 'react'
 
+import { env } from '@/src/lib/env'
 import { useAppStore } from '@/src/lib/store'
 
 export default function LandingPage() {
@@ -12,35 +13,90 @@ export default function LandingPage() {
 
   const { isVerified, walletAddress, setVerified, setWalletAddress, setSession, proofId } = useAppStore()
 
+  const isMiniKitAvailable = () => {
+    try {
+      return MiniKit.isInstalled()
+    } catch {
+      return false
+    }
+  }
+
+  async function readJsonSafely<T = Record<string, unknown>>(response: Response): Promise<T | null> {
+    const raw = await response.text()
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as T
+    } catch {
+      return null
+    }
+  }
+
   async function handleVerify() {
     setLoading('verify')
     setError('')
     try {
-      const { finalPayload } = await MiniKit.commandsAsync.verify({
-        action: 'omni-yield-access',
-        signal: walletAddress || 'wallet-pending',
-      })
+      const signal = walletAddress || 'wallet-pending'
+      const hasVerifyCommand = isMiniKitAvailable() && isCommandAvailable(Command.Verify)
 
-      if (finalPayload.status !== 'success') {
-        throw new Error(`verification failed: ${finalPayload.error_code}`)
+      let proofPayload: unknown
+      if (hasVerifyCommand) {
+        const { finalPayload } = await MiniKit.commandsAsync.verify({
+          action: env.worldIdAction,
+          signal,
+          verification_level: VerificationLevel.Device,
+        })
+
+        if (finalPayload.status !== 'success') {
+          if (env.worldIdDevBypass) {
+            proofPayload = {
+              nullifier_hash: `dev-${crypto.randomUUID()}`,
+              verification_level: 'device',
+              merkle_root: '0x0',
+              proof: '0x0',
+            }
+          } else {
+            throw new Error(`verification failed: ${finalPayload.error_code}`)
+          }
+        } else {
+          proofPayload = finalPayload
+        }
+      } else if (env.worldIdDevBypass) {
+        proofPayload = {
+          nullifier_hash: `dev-${crypto.randomUUID()}`,
+          verification_level: 'device',
+          merkle_root: '0x0',
+          proof: '0x0',
+        }
+      } else {
+        throw new Error(
+          "MiniKit 'verify' command is unavailable. Open inside World App or enable NEXT_PUBLIC_WORLD_ID_DEV_BYPASS=true for local dev.",
+        )
       }
 
       const verifyRes = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          proof: finalPayload,
-          signal: walletAddress || 'wallet-pending',
-          action: 'omni-yield-access',
+          proof: proofPayload,
+          signal,
+          action: env.worldIdAction,
         }),
       })
 
+      const payload = await readJsonSafely<{ error?: string; detail?: string; proofId?: string }>(verifyRes)
+
       if (!verifyRes.ok) {
-        const payload = await verifyRes.json()
-        throw new Error(payload.error || 'server verification failed')
+        throw new Error(
+          payload?.detail
+            ? `${payload.error || 'verification_failed'}: ${payload.detail}`
+            : payload?.error || `server verification failed (${verifyRes.status})`,
+        )
       }
 
-      const payload = await verifyRes.json()
+      if (!payload?.proofId) {
+        throw new Error('verify endpoint returned no proof id')
+      }
+
       setVerified(true)
       setSession('', payload.proofId)
     } catch (e) {
@@ -54,23 +110,35 @@ export default function LandingPage() {
     setLoading('wallet')
     setError('')
     try {
-      const nonce = crypto.randomUUID()
-      const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
-        nonce,
-        statement: 'Sign in to Omni-Yield',
-      })
+      const hasWalletAuthCommand = isMiniKitAvailable() && isCommandAvailable(Command.WalletAuth)
+      let resolvedWalletAddress = ''
 
-      if (finalPayload.status !== 'success') {
-        throw new Error(`wallet auth failed: ${finalPayload.error_code}`)
+      if (hasWalletAuthCommand) {
+        const nonce = crypto.randomUUID()
+        const { finalPayload } = await MiniKit.commandsAsync.walletAuth({
+          nonce,
+          statement: 'Sign in to Omni-Yield',
+        })
+
+        if (finalPayload.status !== 'success') {
+          throw new Error(`wallet auth failed: ${finalPayload.error_code}`)
+        }
+        resolvedWalletAddress = finalPayload.address
+      } else if (env.worldIdDevBypass) {
+        resolvedWalletAddress = env.devWalletAddress
+      } else {
+        throw new Error(
+          "MiniKit 'wallet-auth' command is unavailable. Open inside World App or enable NEXT_PUBLIC_WORLD_ID_DEV_BYPASS=true for local dev.",
+        )
       }
 
-      setWalletAddress(finalPayload.address)
+      setWalletAddress(resolvedWalletAddress)
 
       const sessionRes = await fetch('/api/session', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          walletAddress: finalPayload.address,
+          walletAddress: resolvedWalletAddress,
           proofId: proofId || undefined,
         }),
       })

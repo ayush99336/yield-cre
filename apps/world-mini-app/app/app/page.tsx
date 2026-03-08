@@ -29,6 +29,8 @@ export default function DashboardPage() {
   const activeChain = position?.position?.activeChain ?? 'unknown'
   const aprBps = position?.position?.aprBps ?? 0
   const totalAssets = position?.position?.totalAssets ?? '0'
+  const dataSource = position?.meta?.source ?? 'empty'
+  const warning = position?.meta?.warning
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-10">
@@ -53,6 +55,8 @@ export default function DashboardPage() {
       <section className="mt-6 rounded-2xl border border-slate-700/50 bg-surface p-4">
         <p className="text-sm text-muted">CRE status</p>
         <p className="mt-1 text-sm">APR monitor enabled. Rebalances run on cron + admin fallback trigger.</p>
+        <p className="mt-2 text-xs text-muted">Position source: {dataSource}</p>
+        {warning ? <p className="mt-1 text-xs text-amber-300">Warning: {warning}</p> : null}
       </section>
 
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}

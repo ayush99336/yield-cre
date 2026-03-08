@@ -17,6 +17,10 @@ type PositionResponse = {
     txHash: string | null
     createdAt: string
   }>
+  meta?: {
+    warning?: string
+    source?: 'onchain' | 'snapshot' | 'empty'
+  }
 }
 
 type AppState = {
