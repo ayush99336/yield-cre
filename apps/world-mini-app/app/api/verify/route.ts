@@ -42,35 +42,26 @@ function hashToFieldDigest(signal: string): `0x${string}` {
 }
 
 type VerifyResult = { success: true } | { success: false; code?: string; detail?: string }
+type ProtocolProofPayload = {
+  protocol_version: string
+  action?: string
+  environment?: string
+  responses: Array<Record<string, unknown>>
+}
 
-async function verifyViaV4({
+function isProtocolProofPayload(input: unknown): input is ProtocolProofPayload {
+  if (!input || typeof input !== 'object') return false
+  const maybe = input as Record<string, unknown>
+  return typeof maybe.protocol_version === 'string' && Array.isArray(maybe.responses)
+}
+
+async function postV4Verify({
   verifierId,
-  action,
-  signal,
-  proof,
+  body,
 }: {
   verifierId: `app_${string}` | `rp_${string}`
-  action: string
-  signal: string
-  proof: ISuccessResult
+  body: Record<string, unknown>
 }): Promise<VerifyResult> {
-  const signalHash = hashToFieldDigest(signal)
-  const body = {
-    protocol_version: '3.0',
-    nonce: '0x0000000000000000000000000000000000000000000000000000000000000000',
-    action,
-    environment: 'production',
-    responses: [
-      {
-        identifier: proof.verification_level,
-        signal_hash: signalHash,
-        proof: proof.proof,
-        merkle_root: proof.merkle_root,
-        nullifier: proof.nullifier_hash,
-      },
-    ],
-  }
-
   const response = await fetch(`https://developer.worldcoin.org/api/v4/verify/${verifierId}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -90,6 +81,54 @@ async function verifyViaV4({
     code: payload?.code ?? `http_${response.status}`,
     detail: payload?.detail ?? 'World verify v4 failed',
   }
+}
+
+async function verifyViaV4({
+  verifierId,
+  action,
+  signal,
+  proof,
+}: {
+  verifierId: `app_${string}` | `rp_${string}`
+  action: string
+  signal: string
+  proof: ISuccessResult
+}): Promise<VerifyResult> {
+  const signalHash = hashToFieldDigest(signal)
+  const body: Record<string, unknown> = {
+    protocol_version: '3.0',
+    nonce: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    action,
+    environment: 'production',
+    responses: [
+      {
+        identifier: proof.verification_level,
+        signal_hash: signalHash,
+        proof: proof.proof,
+        merkle_root: proof.merkle_root,
+        nullifier: proof.nullifier_hash,
+      },
+    ],
+  }
+
+  return postV4Verify({ verifierId, body })
+}
+
+async function verifyProtocolPayloadViaV4({
+  verifierId,
+  action,
+  protocolPayload,
+}: {
+  verifierId: `app_${string}` | `rp_${string}`
+  action: string
+  protocolPayload: ProtocolProofPayload
+}): Promise<VerifyResult> {
+  const body: Record<string, unknown> = {
+    ...protocolPayload,
+    action: protocolPayload.action ?? action,
+    environment: protocolPayload.environment ?? 'production',
+  }
+  return postV4Verify({ verifierId, body })
 }
 
 export async function POST(request: Request) {
@@ -159,18 +198,41 @@ export async function POST(request: Request) {
       if (!parsed.data.proof) {
         return NextResponse.json({ error: 'proof is required' }, { status: 400 })
       }
-      const proof = normalizeProofPayload(parsed.data.proof)
-      if (!proof) {
-        return NextResponse.json({ error: 'invalid proof payload shape' }, { status: 400 })
+      if (isProtocolProofPayload(parsed.data.proof)) {
+        verificationResult = await verifyProtocolPayloadViaV4({
+          verifierId: verifierId as `app_${string}` | `rp_${string}`,
+          action,
+          protocolPayload: parsed.data.proof,
+        })
+        const firstResponse = parsed.data.proof.responses[0]
+        if (!firstResponse) {
+          return NextResponse.json({ error: 'responses array is empty' }, { status: 400 })
+        }
+        const responseNullifier = firstResponse.nullifier
+        if (typeof responseNullifier === 'string') {
+          nullifierHash = responseNullifier
+        } else {
+          return NextResponse.json(
+            { error: 'response nullifier is missing for uniqueness proof' },
+            { status: 400 },
+          )
+        }
+        verificationLevel =
+          typeof firstResponse.identifier === 'string' ? firstResponse.identifier : 'device'
+      } else {
+        const proof = normalizeProofPayload(parsed.data.proof)
+        if (!proof) {
+          return NextResponse.json({ error: 'invalid proof payload shape' }, { status: 400 })
+        }
+        verificationResult = await verifyViaV4({
+          verifierId: verifierId as `app_${string}` | `rp_${string}`,
+          action,
+          signal: parsed.data.signal,
+          proof,
+        })
+        nullifierHash = proof.nullifier_hash
+        verificationLevel = proof.verification_level
       }
-      verificationResult = await verifyViaV4({
-        verifierId: verifierId as `app_${string}` | `rp_${string}`,
-        action,
-        signal: parsed.data.signal,
-        proof,
-      })
-      nullifierHash = proof.nullifier_hash
-      verificationLevel = proof.verification_level
     }
 
     if (!verificationResult.success) {
