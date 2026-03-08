@@ -51,6 +51,22 @@ contract YieldVaultTest is Test {
         assertEq(usdc.balanceOf(user), 999_200e6);
     }
 
+    function testDepositPrefundedAndLocalWithdrawAccounting() external {
+        vm.startPrank(user);
+        usdc.transfer(address(vault), 1000e6);
+        vault.depositPrefunded(1000e6);
+
+        assertEq(vault.totalAssets(), 1000e6);
+        assertEq(vault.shares(user), 1000e6);
+
+        vault.withdraw(200e6);
+        vm.stopPrank();
+
+        assertEq(vault.totalAssets(), 800e6);
+        assertEq(vault.shares(user), 800e6);
+        assertEq(usdc.balanceOf(user), 999_200e6);
+    }
+
     function testRebalanceAuth() external {
         vm.prank(user);
         vm.expectRevert(YieldVault.NotAuthorized.selector);

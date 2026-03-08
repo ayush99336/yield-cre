@@ -11,6 +11,7 @@ import { useAppStore } from '@/src/lib/store'
 export default function WithdrawPage() {
   const [amount, setAmount] = useState('')
   const [error, setError] = useState('')
+  const [debugUrl, setDebugUrl] = useState('')
   const { txStatus, setTxStatus } = useAppStore()
 
   const canUseMiniKitTx = () => {
@@ -28,6 +29,7 @@ export default function WithdrawPage() {
 
   async function submitWithdraw() {
     setError('')
+    setDebugUrl('')
     setTxStatus('signing')
 
     try {
@@ -58,10 +60,17 @@ export default function WithdrawPage() {
 
         if (finalPayload.status !== 'success') {
           setTxStatus('failed')
+          const details = JSON.stringify(finalPayload.details ?? {})
+          const detailDebugUrl =
+            (finalPayload.details?.debugUrl as string | undefined) ??
+            (finalPayload.details?.debug_url as string | undefined) ??
+            (finalPayload.details?.tenderlyUrl as string | undefined) ??
+            ''
+          if (detailDebugUrl) setDebugUrl(detailDebugUrl)
           setError(
             finalPayload.error_code === 'simulation_failed'
-              ? 'Simulation failed: check your share balance and vault configuration.'
-              : finalPayload.error_code,
+              ? `Simulation failed (${details}).`
+              : `${finalPayload.error_code} (${details})`,
           )
           return
         }
@@ -106,6 +115,11 @@ export default function WithdrawPage() {
 
       <p className="mt-6 text-sm text-muted">TX status: {txStatus}</p>
       {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
+      {debugUrl ? (
+        <p className="mt-2 text-xs text-amber-300">
+          Debug URL: <a className="underline" href={debugUrl}>{debugUrl}</a>
+        </p>
+      ) : null}
     </main>
   )
 }

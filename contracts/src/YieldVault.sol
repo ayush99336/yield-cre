@@ -54,6 +54,7 @@ contract YieldVault is Ownable {
     error InvalidShares();
     error NotAuthorized();
     error UnknownChain();
+    error InsufficientPrefundedBalance();
     error InvalidSourceSelector();
     error InvalidSourceSender();
     error UnsupportedMessageType();
@@ -96,8 +97,25 @@ contract YieldVault is Ownable {
     function deposit(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
 
-        uint256 totalAssetsBefore = totalAssets();
         usdc.safeTransferFrom(msg.sender, address(this), amount);
+        _recordDeposit(msg.sender, amount);
+    }
+
+    /// @notice Records a deposit after tokens have already been transferred to this vault.
+    /// @dev Intended for World Mini App flow where approve() is disallowed.
+    function depositPrefunded(uint256 amount) external {
+        if (amount == 0) revert ZeroAmount();
+
+        // Ensure we only account for assets that are already present but not yet accounted in managedAssets.
+        if (usdc.balanceOf(address(this)) < managedAssets + amount) {
+            revert InsufficientPrefundedBalance();
+        }
+
+        _recordDeposit(msg.sender, amount);
+    }
+
+    function _recordDeposit(address depositor, uint256 amount) internal {
+        uint256 totalAssetsBefore = totalAssets();
 
         uint256 mintedShares;
         if (totalShares == 0 || totalAssetsBefore == 0) {
@@ -106,18 +124,18 @@ contract YieldVault is Ownable {
             mintedShares = (amount * totalShares) / totalAssetsBefore;
         }
 
-        shares[msg.sender] += mintedShares;
+        shares[depositor] += mintedShares;
         totalShares += mintedShares;
         managedAssets += amount;
 
-        emit Deposited(msg.sender, amount, mintedShares);
+        emit Deposited(depositor, amount, mintedShares);
 
         uint64 selector = chainSelectors[currentYieldChain];
         if (selector != 0) {
             _sendCcip(
                 currentYieldChain,
                 MessageCodec.MessageType.DEPOSIT,
-                msg.sender,
+                depositor,
                 amount,
                 0,
                 currentYieldChain,
