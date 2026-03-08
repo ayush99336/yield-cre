@@ -44,12 +44,12 @@ function hashToFieldDigest(signal: string): `0x${string}` {
 type VerifyResult = { success: true } | { success: false; code?: string; detail?: string }
 
 async function verifyViaV4({
-  appId,
+  verifierId,
   action,
   signal,
   proof,
 }: {
-  appId: `app_${string}`
+  verifierId: `app_${string}` | `rp_${string}`
   action: string
   signal: string
   proof: ISuccessResult
@@ -71,7 +71,7 @@ async function verifyViaV4({
     ],
   }
 
-  const response = await fetch(`https://developer.worldcoin.org/api/v4/verify/${appId}`, {
+  const response = await fetch(`https://developer.worldcoin.org/api/v4/verify/${verifierId}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -100,8 +100,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'invalid request body' }, { status: 400 })
     }
 
+    const rpId = (process.env.WORLD_RP_ID ??
+      process.env.NEXT_PUBLIC_WORLD_RP_ID) as `rp_${string}` | undefined
     const appId = (process.env.WORLD_APP_ID ??
       process.env.NEXT_PUBLIC_WORLD_APP_ID) as `app_${string}` | undefined
+    const verifierId = rpId ?? appId
     const devBypass = process.env.WORLD_ID_DEV_BYPASS === 'true'
     const action =
       parsed.data.action ??
@@ -112,7 +115,9 @@ export async function POST(request: Request) {
     console.log('verify_request', {
       action,
       signal: parsed.data.signal,
+      rpId,
       appId,
+      verifierId,
       appIdConfigured: Boolean(appId),
       devBypass,
     })
@@ -131,8 +136,11 @@ export async function POST(request: Request) {
       })
     }
 
-    if (!appId && !devBypass) {
-      return NextResponse.json({ error: 'WORLD_APP_ID is not configured' }, { status: 500 })
+    if (!verifierId && !devBypass) {
+      return NextResponse.json(
+        { error: 'WORLD_RP_ID or WORLD_APP_ID is not configured' },
+        { status: 500 },
+      )
     }
 
     let verificationResult: VerifyResult
@@ -156,7 +164,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'invalid proof payload shape' }, { status: 400 })
       }
       verificationResult = await verifyViaV4({
-        appId: appId as `app_${string}`,
+        verifierId: verifierId as `app_${string}` | `rp_${string}`,
         action,
         signal: parsed.data.signal,
         proof,
@@ -167,7 +175,9 @@ export async function POST(request: Request) {
 
     if (!verificationResult.success) {
       console.log('verify_failed', {
+        rpId,
         appId,
+        verifierId,
         action,
         code: verificationResult.code,
         detail: verificationResult.detail,
