@@ -3,9 +3,9 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { worldSepolia } from '@/src/lib/chains'
 import { requireAdminKey } from '@/src/lib/server/auth'
 import { prisma } from '@/src/lib/server/db'
+import { getServerRuntimeConfig } from '@/src/lib/server/runtime-config'
 
 const bodySchema = z.object({
   targetChain: z.string().min(1),
@@ -43,9 +43,10 @@ export async function POST(request: Request) {
     },
   })
 
-  const privateKey = process.env.ADMIN_REBALANCE_PRIVATE_KEY as `0x${string}` | undefined
-  const vaultAddress = process.env.HOME_VAULT_ADDRESS as `0x${string}` | undefined
-  const rpcUrl = process.env.NEXT_PUBLIC_WORLD_SEPOLIA_RPC_URL
+  const runtime = getServerRuntimeConfig()
+  const privateKey = runtime.adminRebalancePrivateKey
+  const vaultAddress = runtime.home.vaultAddress
+  const rpcUrl = runtime.home.rpcUrl
 
   if (!privateKey || !vaultAddress || !rpcUrl) {
     await prisma.rebalanceAction.update({
@@ -63,28 +64,82 @@ export async function POST(request: Request) {
   const account = privateKeyToAccount(privateKey)
   const client = createWalletClient({
     account,
-    chain: worldSepolia,
+    chain: runtime.home.chain,
     transport: http(rpcUrl),
   })
 
-  const hash = await client.writeContract({
-    address: vaultAddress,
-    abi: vaultAbi,
-    functionName: 'initiateRebalance',
-    args: [parsed.data.targetChain],
-  })
+  try {
+    const hash = await client.writeContract({
+      address: vaultAddress,
+      abi: vaultAbi,
+      functionName: 'initiateRebalance',
+      args: [parsed.data.targetChain],
+    })
 
-  await prisma.rebalanceAction.update({
-    where: { id: action.id },
-    data: {
+    await prisma.rebalanceAction.update({
+      where: { id: action.id },
+      data: {
+        status: 'submitted',
+        txHash: hash,
+      },
+    })
+    await prisma.vaultEvent.create({
+      data: {
+        chain: runtime.home.chain.name,
+        txHash: hash,
+        eventType: 'admin_rebalance_submitted',
+        payload: {
+          actionId: action.id,
+          targetChain: parsed.data.targetChain,
+          executionMode: runtime.mode,
+        },
+      },
+    })
+
+    return NextResponse.json({
+      id: action.id,
       status: 'submitted',
       txHash: hash,
-    },
-  })
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'rebalance_failed'
+    const shouldSimulate = runtime.mode === 'testnet_hybrid' && process.env.TESTNET_REBALANCE_SIMULATION !== 'false'
+    if (shouldSimulate) {
+      await prisma.rebalanceAction.update({
+        where: { id: action.id },
+        data: {
+          status: 'simulated',
+          notes: `simulated due to onchain failure: ${message}`,
+        },
+      })
+      await prisma.vaultEvent.create({
+        data: {
+          chain: runtime.home.chain.name,
+          txHash: `sim-rebalance-${action.id}`,
+          eventType: 'admin_rebalance_simulated',
+          payload: {
+            actionId: action.id,
+            targetChain: parsed.data.targetChain,
+            reason: message,
+            executionMode: runtime.mode,
+          },
+        },
+      })
 
-  return NextResponse.json({
-    id: action.id,
-    status: 'submitted',
-    txHash: hash,
-  })
+      return NextResponse.json({
+        id: action.id,
+        status: 'simulated',
+        reason: message,
+      })
+    }
+
+    await prisma.rebalanceAction.update({
+      where: { id: action.id },
+      data: {
+        status: 'failed',
+        notes: message,
+      },
+    })
+    return NextResponse.json({ error: 'rebalance_failed', detail: message }, { status: 500 })
+  }
 }

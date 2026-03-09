@@ -1,0 +1,40 @@
+{
+  "environment": "testnet",
+  "updatedAt": "2026-03-08T00:00:00.000Z",
+  "home": {
+    "chainName": "world-sepolia",
+    "chainSelector": "0",
+    "rpcUrl": "https://worldchain-sepolia.g.alchemy.com/public",
+    "router": "0x000000000000000000000000000000000000dEaD",
+    "vault": "0x0000000000000000000000000000000000000001",
+    "usdc": "0x0000000000000000000000000000000000000002"
+  },
+  "destinations": {
+    "polygonAmoy": {
+      "id": "polygonAmoy",
+      "chainName": "polygon-testnet-amoy",
+      "chainId": 80002,
+      "chainSelector": "16281711391670634445",
+      "rpcUrl": "https://polygon-amoy-bor-rpc.publicnode.com",
+      "receiver": "0x0000000000000000000000000000000000000003",
+      "dataProvider": "0x0000000000000000000000000000000000000004",
+      "pool": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+      "aToken": "0x0000000000000000000000000000000000000005",
+      "usdc": "0x0000000000000000000000000000000000000006",
+      "enabled": true
+    },
+    "arbitrumSepolia": {
+      "id": "arbitrumSepolia",
+      "chainName": "ethereum-testnet-sepolia-arbitrum-1",
+      "chainId": 421614,
+      "chainSelector": "3478487238524512106",
+      "rpcUrl": "https://arbitrum-sepolia-rpc.publicnode.com",
+      "receiver": "0x0000000000000000000000000000000000000007",
+      "dataProvider": "0x0000000000000000000000000000000000000008",
+      "pool": "0xBfC91D59fdAA134A4ED45f7B584cAf96D7792Eff",
+      "aToken": "0x0000000000000000000000000000000000000009",
+      "usdc": "0x0000000000000000000000000000000000000010",
+      "enabled": true
+    }
+  }
+}

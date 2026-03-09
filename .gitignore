@@ -15,3 +15,6 @@ contracts/cache/
 contracts/out/
 contracts/broadcast/
 apps/world-mini-app/.next/
+deployments/addresses.testnet.json
+deployments/addresses.mainnet.json
+deployments/allowlist.mainnet-shadow.json

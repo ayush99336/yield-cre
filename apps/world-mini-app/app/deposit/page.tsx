@@ -25,7 +25,7 @@ export default function DepositPage() {
   const [amount, setAmount] = useState('')
   const [error, setError] = useState('')
   const [debugUrl, setDebugUrl] = useState('')
-  const { txStatus, setTxStatus } = useAppStore()
+  const { txStatus, setTxStatus, walletAddress } = useAppStore()
 
   const canUseMiniKitTx = () => {
     try {
@@ -58,6 +58,14 @@ export default function DepositPage() {
       }
 
       const amountUnits = parseUnits(amount, 6)
+
+      if (env.isTestnetHybridMode) {
+        setTxStatus('admin_required')
+        setError(
+          'Testnet Hybrid mode: direct MiniKit transactions are disabled. Use POST /api/admin/deposit (x-admin-key) for demo deposits.',
+        )
+        return
+      }
 
       if (canUseMiniKitTx()) {
         if (!/^0x[a-fA-F0-9]{40}$/.test(env.homeUsdcAddress)) {
@@ -120,9 +128,19 @@ export default function DepositPage() {
     <main className="mx-auto min-h-screen max-w-xl px-6 py-10">
       <h1 className="text-3xl font-semibold">Deposit</h1>
       <p className="mt-2 text-sm text-muted">
-        Uses approve-free flow for World App: token `transfer()` to vault + `depositPrefunded()` in a single
-        MiniKit transaction.
+        {env.isMainnetLiveMode
+          ? 'Mainnet Live mode: token `transfer()` to vault + `depositPrefunded()` in a single MiniKit transaction.'
+          : 'Testnet Hybrid mode: operator-triggered admin deposit endpoint is the primary path.'}
       </p>
+
+      {env.isTestnetHybridMode ? (
+        <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <p>Admin CTA (server-side):</p>
+          <code>
+            {`curl -X POST /api/admin/deposit -H "x-admin-key: <ADMIN_API_KEY>" -H "content-type: application/json" -d '{"walletAddress":"${walletAddress || '0x...'}","amount":"${amount || '1'}"}'`}
+          </code>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-3">
         <input

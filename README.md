@@ -21,10 +21,15 @@ cd .. && npm run simulate:cre
 
 ## Key commands
 
-- CRE simulation: `npm run simulate:cre`
+- Sync registry into CRE/app env exports: `npm run config:sync`
+- CRE simulation (using current config): `npm run simulate:cre`
+- Sync config + simulate CRE: `npm run simulate:cre:sync`
 - CRE unit tests: `cd services/cre-workflow/cre/omni-yield && bun test`
 - Contracts tests: `cd contracts && forge test`
 - Mini app local dev: `npm run dev:mini-app`
+- Deploy testnet hybrid (World Sepolia): `npm run deploy:world:mvp`
+- Deploy real cross-chain testnet (ETH Sepolia -> Arbitrum/OP): `npm run deploy:testnet:crosschain`
+- Deploy mainnet shadow vault: `npm run deploy:mainnet:shadow`
 
 ## Fallback policy
 

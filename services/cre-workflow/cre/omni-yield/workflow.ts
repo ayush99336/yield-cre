@@ -11,6 +11,8 @@ export const configSchema = z.object({
   homeChainName: z.string(),
   homeVaultAddress: z.string(),
   homeVaultWriteGasLimit: z.string(),
+  currentYieldChainFallback: z.string().optional(),
+  writeEnabled: z.boolean().optional(),
   chains: z.array(
     z.object({
       id: z.string(),
@@ -161,12 +163,18 @@ export const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): s
 
   const homeClient = getEvmClient(runtime.config.homeChainName)
   const vault = new YieldVault(homeClient, runtime.config.homeVaultAddress as Address)
-  let currentYieldChain = ''
+  let currentYieldChain = runtime.config.currentYieldChainFallback ?? ''
   try {
     currentYieldChain = vault.currentYieldChain(runtime)
   } catch (err) {
-    runtime.log(`Vault read failed (currentYieldChain): ${String(err)}; skipping cycle.`)
-    return ''
+    if (currentYieldChain) {
+      runtime.log(
+        `Vault read failed (currentYieldChain): ${String(err)}; using fallback chain=${currentYieldChain}.`,
+      )
+    } else {
+      runtime.log(`Vault read failed (currentYieldChain): ${String(err)}; skipping cycle.`)
+      return ''
+    }
   }
   runtime.log(`Current vault chain=${currentYieldChain}`)
 
@@ -180,6 +188,13 @@ export const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): s
   })
   if (decision.kind === 'skip') {
     runtime.log(`Skipping rebalance: ${decision.reason}`)
+    return ''
+  }
+
+  if (!runtime.config.writeEnabled) {
+    runtime.log(
+      `Dry-run mode (writeEnabled=false): would call initiateRebalance(targetChain=${decision.targetChain}, diffBps=${decision.diffBps}).`,
+    )
     return ''
   }
 

@@ -46,6 +46,14 @@ export default function WithdrawPage() {
 
       const shareUnits = parseUnits(amount, 6)
 
+      if (env.isTestnetHybridMode) {
+        setTxStatus('admin_required')
+        setError(
+          'Testnet Hybrid mode: direct MiniKit withdraw is disabled. Use operator flow (manual tx or admin scripts).',
+        )
+        return
+      }
+
       if (canUseMiniKitTx()) {
         const { finalPayload } = await MiniKit.commandsAsync.sendTransaction({
           transaction: [
@@ -97,9 +105,17 @@ export default function WithdrawPage() {
     <main className="mx-auto min-h-screen max-w-xl px-6 py-10">
       <h1 className="text-3xl font-semibold">Withdraw</h1>
       <p className="mt-2 text-sm text-muted">
-        Calls `YieldVault.withdraw()` and tracks CCIP return lifecycle; uses simulated lifecycle in dev
-        bypass mode.
+        {env.isMainnetLiveMode
+          ? 'Calls `YieldVault.withdraw()` from MiniKit in live mode.'
+          : 'Testnet Hybrid mode: withdraw should be handled through operator scripts/admin fallback.'}
       </p>
+
+      {env.isTestnetHybridMode ? (
+        <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <p>Operator CTA:</p>
+          <code>{`Use cast/admin tooling to execute vault.withdraw(shares) for demo accounts on testnet.`}</code>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-3">
         <input

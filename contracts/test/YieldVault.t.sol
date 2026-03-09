@@ -67,6 +67,48 @@ contract YieldVaultTest is Test {
         assertEq(usdc.balanceOf(user), 999_200e6);
     }
 
+    function testDepositPrefundedForCreditsRecipient() external {
+        vm.prank(user);
+        usdc.transfer(address(vault), 500e6);
+
+        vm.prank(owner);
+        vault.depositPrefundedFor(user, 500e6);
+
+        assertEq(vault.totalAssets(), 500e6);
+        assertEq(vault.shares(user), 500e6);
+    }
+
+    function testDepositPrefundedForOnlyOwner() external {
+        vm.prank(user);
+        usdc.transfer(address(vault), 500e6);
+
+        vm.prank(user);
+        vm.expectRevert();
+        vault.depositPrefundedFor(user, 500e6);
+    }
+
+    function testDepositRevertsWhenPausedOrAboveCap() external {
+        vm.prank(owner);
+        vault.setDepositsPaused(true);
+
+        vm.startPrank(user);
+        usdc.approve(address(vault), 100e6);
+        vm.expectRevert(YieldVault.DepositsPaused.selector);
+        vault.deposit(100e6);
+        vm.stopPrank();
+
+        vm.prank(owner);
+        vault.setDepositsPaused(false);
+        vm.prank(owner);
+        vault.setMaxDepositAmount(50e6);
+
+        vm.startPrank(user);
+        usdc.approve(address(vault), 100e6);
+        vm.expectRevert(YieldVault.DepositAboveCap.selector);
+        vault.deposit(100e6);
+        vm.stopPrank();
+    }
+
     function testRebalanceAuth() external {
         vm.prank(user);
         vm.expectRevert(YieldVault.NotAuthorized.selector);

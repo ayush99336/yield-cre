@@ -1,0 +1,14 @@
+{
+  "miniappId": "app_<your_world_app_id>",
+  "network": "world-mainnet",
+  "permit2Tokens": ["0x0000000000000000000000000000000000000012"],
+  "contractEntrypoints": ["0x0000000000000000000000000000000000000011"],
+  "expectedFunctions": {
+    "0x0000000000000000000000000000000000000012": ["transfer(address,uint256)"],
+    "0x0000000000000000000000000000000000000011": ["depositPrefunded(uint256)", "withdraw(uint256)"]
+  },
+  "notes": [
+    "Paste permit2Tokens and contractEntrypoints into Developer Portal > Configuration > Advanced.",
+    "MiniKit direct tx path must only reference these contracts and functions in mainnet_live mode."
+  ]
+}

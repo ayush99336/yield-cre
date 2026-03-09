@@ -207,6 +207,9 @@ export default function LandingPage() {
         <h1 className="mt-3 text-4xl font-semibold leading-tight">
           World ID gated cross-chain yield optimizer.
         </h1>
+        <p className="mt-2 text-xs text-accent">
+          Execution Mode: {env.isMainnetLiveMode ? 'Mainnet Live' : 'Testnet Hybrid'}
+        </p>
 
         <div className="mt-8 grid gap-3 sm:max-w-xl">
           <button

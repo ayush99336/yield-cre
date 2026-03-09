@@ -13,7 +13,11 @@
     "dev:mini-app": "npm run dev -w @yield-cre/world-mini-app",
     "dev:workflow": "npm run dev -w @yield-cre/cre-workflow",
     "simulate:cre": "npm run cre:simulate -w @yield-cre/cre-workflow",
+    "simulate:cre:sync": "npm run config:sync && npm run simulate:cre",
+    "config:sync": "node scripts/sync-config-from-registry.mjs",
     "deploy:world:mvp": "bash scripts/deploy-world-sepolia-mvp.sh",
+    "deploy:testnet:crosschain": "bash scripts/deploy-testnet-crosschain.sh",
+    "deploy:mainnet:shadow": "bash scripts/deploy-mainnet-shadow.sh",
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces"

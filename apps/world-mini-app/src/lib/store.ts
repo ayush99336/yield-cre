@@ -2,26 +2,7 @@
 
 import { create } from 'zustand'
 
-type PositionResponse = {
-  walletAddress: string
-  position: {
-    totalAssets: string
-    activeChain: string
-    aprBps: number
-    createdAt: string
-  } | null
-  recentRebalances: Array<{
-    id: string
-    targetChain: string
-    status: string
-    txHash: string | null
-    createdAt: string
-  }>
-  meta?: {
-    warning?: string
-    source?: 'onchain' | 'snapshot' | 'empty'
-  }
-}
+import type { PositionResponse } from './types'
 
 type AppState = {
   isVerified: boolean

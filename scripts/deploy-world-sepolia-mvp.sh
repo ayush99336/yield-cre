@@ -128,12 +128,59 @@ NEXT_PUBLIC_HOME_VAULT_ADDRESS=$HOME_VAULT_ADDRESS
 NEXT_PUBLIC_WORLD_SEPOLIA_RPC_URL=$WORLD_SEPOLIA_RPC_URL
 EOF
 
+REGISTRY_DIR="$REPO_ROOT/deployments"
+mkdir -p "$REGISTRY_DIR"
+REGISTRY_FILE="$REGISTRY_DIR/addresses.testnet.json"
+cat >"$REGISTRY_FILE" <<EOF
+{
+  "environment": "testnet",
+  "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "home": {
+    "chainName": "world-sepolia",
+    "chainSelector": "0",
+    "rpcUrl": "$WORLD_SEPOLIA_RPC_URL",
+    "router": "$HOME_ROUTER_OVERRIDE",
+    "vault": "$HOME_VAULT_ADDRESS",
+    "usdc": "$HOME_USDC"
+  },
+  "destinations": {
+    "polygonAmoy": {
+      "id": "polygonAmoy",
+      "chainName": "polygon-testnet-amoy",
+      "chainId": 80002,
+      "chainSelector": "16281711391670634445",
+      "rpcUrl": "${POLYGON_AMOY_RPC_URL:-https://polygon-amoy-bor-rpc.publicnode.com}",
+      "receiver": "",
+      "dataProvider": "${TESTNET_POLYGON_AMOY_DATA_PROVIDER:-}",
+      "pool": "${POLYGON_POOL:-}",
+      "aToken": "${POLYGON_A_TOKEN:-}",
+      "usdc": "${POLYGON_USDC:-}",
+      "enabled": true
+    },
+    "arbitrumSepolia": {
+      "id": "arbitrumSepolia",
+      "chainName": "ethereum-testnet-sepolia-arbitrum-1",
+      "chainId": 421614,
+      "chainSelector": "3478487238524512106",
+      "rpcUrl": "${ARBITRUM_SEPOLIA_RPC_URL:-https://arbitrum-sepolia-rpc.publicnode.com}",
+      "receiver": "",
+      "dataProvider": "${TESTNET_ARBITRUM_SEPOLIA_DATA_PROVIDER:-}",
+      "pool": "${ARBITRUM_POOL:-}",
+      "aToken": "${ARBITRUM_A_TOKEN:-}",
+      "usdc": "${ARBITRUM_USDC:-}",
+      "enabled": true
+    }
+  }
+}
+EOF
+
 echo
 echo "Deployment complete."
 echo "HOME_USDC=$HOME_USDC"
 echo "HOME_VAULT_ADDRESS=$HOME_VAULT_ADDRESS"
 echo
 echo "Wrote output env file: $OUT_FILE"
+echo "Wrote address registry: $REGISTRY_FILE"
 echo "Copy these into apps/world-mini-app/.env:"
 echo "  HOME_VAULT_ADDRESS=$HOME_VAULT_ADDRESS"
 echo "  NEXT_PUBLIC_HOME_VAULT_ADDRESS=$HOME_VAULT_ADDRESS"

@@ -20,6 +20,8 @@ contract YieldVault is Ownable {
     address public creForwarder;
     string public currentYieldChain;
     string public pendingRebalanceChain;
+    bool public depositsPaused;
+    uint256 public maxDepositAmount;
 
     mapping(address => uint256) public shares;
     uint256 public totalShares;
@@ -36,6 +38,8 @@ contract YieldVault is Ownable {
     event RebalanceInitiated(string indexed oldChain, string indexed newChain);
     event RebalanceCompleted(string indexed oldChain, string indexed newChain, uint256 movedAmount);
     event ForwarderUpdated(address indexed newForwarder);
+    event DepositsPausedUpdated(bool paused);
+    event MaxDepositAmountUpdated(uint256 amount);
     event ChainConfigUpdated(string indexed chain, uint64 selector, address receiver);
     event CcipMessageSent(
         bytes32 indexed messageId,
@@ -55,6 +59,9 @@ contract YieldVault is Ownable {
     error NotAuthorized();
     error UnknownChain();
     error InsufficientPrefundedBalance();
+    error DepositsPaused();
+    error DepositAboveCap();
+    error InvalidDepositRecipient();
     error InvalidSourceSelector();
     error InvalidSourceSender();
     error UnsupportedMessageType();
@@ -78,6 +85,7 @@ contract YieldVault is Ownable {
         usdc = IERC20(usdcToken);
         creForwarder = forwarder;
         currentYieldChain = initialYieldChain;
+        maxDepositAmount = type(uint256).max;
     }
 
     receive() external payable {}
@@ -85,6 +93,16 @@ contract YieldVault is Ownable {
     function setCreForwarder(address forwarder) external onlyOwner {
         creForwarder = forwarder;
         emit ForwarderUpdated(forwarder);
+    }
+
+    function setDepositsPaused(bool paused) external onlyOwner {
+        depositsPaused = paused;
+        emit DepositsPausedUpdated(paused);
+    }
+
+    function setMaxDepositAmount(uint256 amount) external onlyOwner {
+        maxDepositAmount = amount;
+        emit MaxDepositAmountUpdated(amount);
     }
 
     function setChainConfig(string calldata chain, uint64 selector, address receiver) external onlyOwner {
@@ -95,7 +113,7 @@ contract YieldVault is Ownable {
     }
 
     function deposit(uint256 amount) external {
-        if (amount == 0) revert ZeroAmount();
+        _validateDeposit(amount);
 
         usdc.safeTransferFrom(msg.sender, address(this), amount);
         _recordDeposit(msg.sender, amount);
@@ -104,7 +122,7 @@ contract YieldVault is Ownable {
     /// @notice Records a deposit after tokens have already been transferred to this vault.
     /// @dev Intended for World Mini App flow where approve() is disallowed.
     function depositPrefunded(uint256 amount) external {
-        if (amount == 0) revert ZeroAmount();
+        _validateDeposit(amount);
 
         // Ensure we only account for assets that are already present but not yet accounted in managedAssets.
         if (usdc.balanceOf(address(this)) < managedAssets + amount) {
@@ -112,6 +130,25 @@ contract YieldVault is Ownable {
         }
 
         _recordDeposit(msg.sender, amount);
+    }
+
+    /// @notice Credits a prefunded deposit to a specific user address.
+    /// @dev Intended for operator/admin orchestration in testnet hybrid mode.
+    function depositPrefundedFor(address depositor, uint256 amount) external onlyOwner {
+        if (depositor == address(0)) revert InvalidDepositRecipient();
+        _validateDeposit(amount);
+
+        if (usdc.balanceOf(address(this)) < managedAssets + amount) {
+            revert InsufficientPrefundedBalance();
+        }
+
+        _recordDeposit(depositor, amount);
+    }
+
+    function _validateDeposit(uint256 amount) internal view {
+        if (depositsPaused) revert DepositsPaused();
+        if (amount == 0) revert ZeroAmount();
+        if (amount > maxDepositAmount) revert DepositAboveCap();
     }
 
     function _recordDeposit(address depositor, uint256 amount) internal {

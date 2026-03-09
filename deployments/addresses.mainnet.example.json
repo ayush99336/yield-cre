@@ -1,0 +1,17 @@
+{
+  "environment": "mainnet",
+  "updatedAt": "2026-03-08T00:00:00.000Z",
+  "home": {
+    "chainName": "world-mainnet",
+    "chainSelector": "0",
+    "rpcUrl": "https://worldchain-mainnet.g.alchemy.com/public",
+    "router": "0x000000000000000000000000000000000000dEaD",
+    "vault": "0x0000000000000000000000000000000000000011",
+    "usdc": "0x0000000000000000000000000000000000000012"
+  },
+  "limits": {
+    "maxDepositAmount": "5000000",
+    "depositsPaused": false
+  },
+  "destinations": {}
+}

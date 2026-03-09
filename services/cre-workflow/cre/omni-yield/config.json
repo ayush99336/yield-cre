@@ -3,25 +3,27 @@
   "rebalanceThresholdBps": 50,
   "cooldownSeconds": 1800,
   "homeChainName": "ethereum-testnet-sepolia",
-  "homeVaultAddress": "0x1111111111111111111111111111111111111111",
+  "homeVaultAddress": "0x460dc0311ef6f3f41693de758adff12ead2f30ba",
   "homeVaultWriteGasLimit": "500000",
+  "currentYieldChainFallback": "baseSepolia",
+  "writeEnabled": false,
   "chains": [
     {
-      "id": "polygonAmoy",
-      "chainName": "polygon-testnet-amoy",
-      "usdc": "0x0000000000000000000000000000000000000001",
-      "dataProvider": "0x0000000000000000000000000000000000000002",
-      "pool": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
-      "receiver": "0x0000000000000000000000000000000000000003",
+      "id": "baseSepolia",
+      "chainName": "ethereum-testnet-sepolia-base-1",
+      "usdc": "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f",
+      "dataProvider": "0xBc9f5b7E248451CdD7cA54e717a2BFe1F32b566b",
+      "pool": "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27",
+      "receiver": "",
       "enabled": true
     },
     {
       "id": "arbitrumSepolia",
       "chainName": "ethereum-testnet-sepolia-arbitrum-1",
-      "usdc": "0x0000000000000000000000000000000000000011",
-      "dataProvider": "0x0000000000000000000000000000000000000012",
+      "usdc": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "dataProvider": "0x12373B5085e3b42D42C1D4ABF3B3Cf4Df0E0Fa01",
       "pool": "0xBfC91D59fdAA134A4ED45f7B584cAf96D7792Eff",
-      "receiver": "0x0000000000000000000000000000000000000013",
+      "receiver": "",
       "enabled": true
     }
   ]

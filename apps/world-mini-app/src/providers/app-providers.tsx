@@ -5,20 +5,26 @@ import { MiniKit } from '@worldcoin/minikit-js'
 import { useEffect, useMemo } from 'react'
 import { WagmiProvider, createConfig, http } from 'wagmi'
 
-import { worldSepolia } from '@/src/lib/chains'
+import { ethereumSepolia, worldMainnet, worldSepolia } from '@/src/lib/chains'
 import { env } from '@/src/lib/env'
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const queryClient = useMemo(() => new QueryClient(), [])
 
   const wagmiConfig = useMemo(
-    () =>
-      createConfig({
-        chains: [worldSepolia],
+    () => {
+      const activeChain = env.isMainnetLiveMode
+        ? worldMainnet
+        : env.testnetHomeChainMode === 'eth'
+          ? ethereumSepolia
+          : worldSepolia
+      return createConfig({
+        chains: [activeChain],
         transports: {
-          [worldSepolia.id]: http(env.rpcUrl),
+          [activeChain.id]: http(env.rpcUrl),
         },
-      }),
+      })
+    },
     [],
   )
 

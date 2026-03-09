@@ -3,7 +3,7 @@ import { createPublicClient, formatUnits, http } from 'viem'
 
 import { loadSession } from '@/src/lib/server/auth'
 import { prisma } from '@/src/lib/server/db'
-import { worldSepolia } from '@/src/lib/chains'
+import { getServerRuntimeConfig } from '@/src/lib/server/runtime-config'
 
 const positionReadAbi = [
   {
@@ -38,9 +38,9 @@ export async function GET(request: Request) {
     take: 10,
   })
 
-  const vaultAddress = (process.env.HOME_VAULT_ADDRESS ??
-    process.env.NEXT_PUBLIC_HOME_VAULT_ADDRESS) as `0x${string}` | undefined
-  const rpcUrl = process.env.NEXT_PUBLIC_WORLD_SEPOLIA_RPC_URL
+  const runtime = getServerRuntimeConfig()
+  const vaultAddress = runtime.home.vaultAddress
+  const rpcUrl = runtime.home.rpcUrl
   const isWalletAddress = /^0x[a-fA-F0-9]{40}$/.test(session.walletAddress)
   const isVaultAddress = !!vaultAddress && /^0x[a-fA-F0-9]{40}$/.test(vaultAddress)
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   if (isVaultAddress && rpcUrl && isWalletAddress) {
     try {
       const client = createPublicClient({
-        chain: worldSepolia,
+        chain: runtime.home.chain,
         transport: http(rpcUrl),
       })
 
@@ -87,13 +87,33 @@ export async function GET(request: Request) {
     warning = 'vault_not_configured'
   }
 
+  if (!latestSnapshot) {
+    warning = warning ?? 'apr_snapshot_missing'
+  }
+
+  const latestAprSnapshot = await prisma.vaultEvent.findFirst({
+    where: { eventType: 'apr_snapshot' },
+    orderBy: { createdAt: 'desc' },
+  })
+  const latestDecision = await prisma.vaultEvent.findFirst({
+    where: { eventType: 'rebalance_decision' },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const chainStatusSnapshots = (latestAprSnapshot?.payload as { chainStatusSnapshots?: unknown } | null)
+    ?.chainStatusSnapshots
+  const rebalanceDecision = latestDecision?.payload ?? null
+
   return NextResponse.json({
     walletAddress: session.walletAddress,
     position,
     recentRebalances: recentActions,
+    chainStatusSnapshots: Array.isArray(chainStatusSnapshots) ? chainStatusSnapshots : [],
+    rebalanceDecision,
     meta: {
       warning,
       source,
+      executionMode: runtime.mode,
     },
   })
 }

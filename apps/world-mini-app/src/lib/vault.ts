@@ -1,3 +1,5 @@
+import { env } from './env'
+
 export const vaultAbi = [
   {
     type: 'function',
@@ -10,6 +12,16 @@ export const vaultAbi = [
     type: 'function',
     name: 'depositPrefunded',
     inputs: [{ name: 'amount', type: 'uint256', internalType: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'depositPrefundedFor',
+    inputs: [
+      { name: 'depositor', type: 'address', internalType: 'address' },
+      { name: 'amount', type: 'uint256', internalType: 'uint256' },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -37,9 +49,7 @@ export const vaultAbi = [
 ] as const
 
 export const defaultHomeVaultAddress = '0x1111111111111111111111111111111111111111'
-export const homeVaultAddress =
-  process.env.NEXT_PUBLIC_HOME_VAULT_ADDRESS ??
-  defaultHomeVaultAddress
+export const homeVaultAddress = env.homeVaultAddress || defaultHomeVaultAddress
 
 export const isHomeVaultConfigured =
   /^0x[a-fA-F0-9]{40}$/.test(homeVaultAddress) &&

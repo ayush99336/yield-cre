@@ -1,73 +1,201 @@
 # Omni-Yield Ops Runbook
 
-## 1) Environment Matrix
+Last updated: March 8, 2026
 
-### Root/Shared
-- `POLYGON_AMOY_RPC_URL`
-- `ARBITRUM_SEPOLIA_RPC_URL`
-- `ETH_SEPOLIA_RPC_URL`
-- `WORLD_SEPOLIA_RPC_URL`
+## 1. Execution Modes
 
-### Contracts Deploy
-- `HOME_CHAIN_MODE` (`world` default, `eth` fallback)
-- `HOME_ROUTER_OVERRIDE` (optional)
-- `OWNER`
-- `CRE_FORWARDER`
-- `HOME_USDC`
-- `POLYGON_USDC`
-- `POLYGON_POOL`
-- `POLYGON_A_TOKEN`
-- `ARBITRUM_USDC`
-- `ARBITRUM_POOL`
-- `ARBITRUM_A_TOKEN`
+- `testnet_hybrid` (default): full cross-chain backend on testnets, admin-assisted deposit/rebalance.
+- `mainnet_live`: minimal capped mainnet shadow vault for real MiniKit transaction rail.
 
-### Mini App/API
-- `DATABASE_URL`
-- `WORLD_APP_ID`
-- `WORLD_ID_DEV_BYPASS`
-- `ADMIN_API_KEY`
-- `ADMIN_REBALANCE_PRIVATE_KEY`
-- `HOME_VAULT_ADDRESS`
-- `NEXT_PUBLIC_WORLD_APP_ID`
-- `NEXT_PUBLIC_WORLD_CLIENT_ID`
-- `NEXT_PUBLIC_HOME_VAULT_ADDRESS`
-- `NEXT_PUBLIC_WORLD_SEPOLIA_RPC_URL`
+Set mode:
 
-### CRE
-- `CRE_ETH_PRIVATE_KEY`
-- `CRE_TARGET`
+```bash
+EXECUTION_MODE=testnet_hybrid
+NEXT_PUBLIC_EXECUTION_MODE=testnet_hybrid
+```
 
-## 2) Home Chain Fallback Procedure
+or
 
-If World Chain Sepolia CCIP lane status blocks end-to-end settlement:
-1. Set `HOME_CHAIN_MODE=eth` in deploy env.
-2. Redeploy vault + receivers via Foundry deploy script.
-3. Update `HOME_VAULT_ADDRESS` and `NEXT_PUBLIC_HOME_VAULT_ADDRESS`.
-4. Re-run `npm run simulate:cre` and sanity-check `/api/admin/rebalance`.
+```bash
+EXECUTION_MODE=mainnet_live
+NEXT_PUBLIC_EXECUTION_MODE=mainnet_live
+```
 
-## 3) Demo Playbook (Judge Flow)
+## 2. Environment Matrix
 
-1. Pre-stage at least one deposit before demo window.
-2. Show dashboard active chain + APY.
-3. Run CRE simulation:
-   - `npm run simulate:cre`
-4. Trigger manual fallback rebalance:
-   - `POST /api/admin/rebalance` with `x-admin-key`.
-5. Show tx hash and updated status on dashboard.
-6. Explain that CRE cron is primary and admin trigger is demo reliability fallback.
+- World ID v4:
+  - `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_ID_SIGNER_PRIVATE_KEY`
+  - `WORLD_ID_ACTION`, `WORLD_ID_ENVIRONMENT`
+- Testnet addresses:
+  - `TESTNET_HOME_CHAIN_MODE`, `TESTNET_HOME_VAULT_ADDRESS`, `TESTNET_HOME_USDC`, `TESTNET_HOME_RPC_URL`
+  - `NEXT_PUBLIC_TESTNET_HOME_CHAIN_MODE`, `NEXT_PUBLIC_TESTNET_HOME_VAULT_ADDRESS`, `NEXT_PUBLIC_TESTNET_HOME_USDC_ADDRESS`, `NEXT_PUBLIC_TESTNET_HOME_RPC_URL`
+- Mainnet addresses:
+  - `MAINNET_HOME_VAULT_ADDRESS`, `MAINNET_HOME_USDC`, `MAINNET_WORLD_RPC_URL`
+  - `NEXT_PUBLIC_MAINNET_HOME_VAULT_ADDRESS`, `NEXT_PUBLIC_MAINNET_HOME_USDC_ADDRESS`, `NEXT_PUBLIC_MAINNET_WORLD_RPC_URL`
+- Admin/API:
+  - `ADMIN_API_KEY`, `ADMIN_REBALANCE_PRIVATE_KEY`
+- Registry:
+  - `TESTNET_ADDRESS_REGISTRY_PATH=deployments/addresses.testnet.json`
+  - `MAINNET_ADDRESS_REGISTRY_PATH=deployments/addresses.mainnet.json`
 
-## 4) Verification Checklist
+## 3. Phase 1: Testnet Hybrid Demo
+
+### 3.1 Deploy real cross-chain testnet stack (ETH Sepolia home)
+
+```bash
+cp scripts/deploy-testnet-crosschain.env.example .env.deploy.testnet.crosschain
+# edit .env.deploy.testnet.crosschain
+bash scripts/deploy-testnet-crosschain.sh .env.deploy.testnet.crosschain
+```
+
+Important:
+- Keep `VAULT_NATIVE_FUND_WEI` non-zero (home CCIP send fees).
+- Keep `ARBITRUM_RECEIVER_NATIVE_FUND_WEI` and `OPTIMISM_RECEIVER_NATIVE_FUND_WEI` non-zero (receiver return-message fees).
+
+Outputs:
+- `.env.deploy.testnet.crosschain.output`
+- `deployments/addresses.testnet.crosschain.json`
+
+### 3.2 Sync generated addresses into CRE/app env vars
+
+```bash
+npm run config:sync
+cat .env.registry.generated
+```
+
+Copy relevant values into root `.env` and `apps/world-mini-app/.env` as needed.
+Set:
+
+```bash
+TESTNET_ADDRESS_REGISTRY_PATH=deployments/addresses.testnet.crosschain.json
+TESTNET_HOME_CHAIN_MODE=eth
+NEXT_PUBLIC_TESTNET_HOME_CHAIN_MODE=eth
+```
+
+### 3.3 Start app and run migrations
+
+```bash
+npm run db:push -w @yield-cre/world-mini-app
+npm run dev:mini-app
+```
+
+### 3.4 Sync telemetry + position snapshots
+
+```bash
+curl -X POST http://localhost:3000/api/admin/sync \
+  -H "x-admin-key: $ADMIN_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{}'
+```
+
+Expected: `200` with `chainStatusSnapshots` and `rebalanceDecision`.
+
+### 3.5 Admin-assisted testnet deposit
+
+```bash
+curl -X POST http://localhost:3000/api/admin/deposit \
+  -H "x-admin-key: $ADMIN_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"walletAddress":"0xYourWallet","amount":"1"}'
+```
+
+Expected: `submitted` + `transferTxHash` + `creditTxHash`.
+
+### 3.6 Rebalance trigger path
+
+Primary proof path:
+
+```bash
+npm run simulate:cre:sync
+```
+
+For hackathon simulation-only proof (no live CRE writes required), keep:
+
+```bash
+CRE_WRITE_ENABLED=false
+CRE_CURRENT_YIELD_CHAIN_FALLBACK=arbitrumSepolia
+```
+
+Manual fallback:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/rebalance \
+  -H "x-admin-key: $ADMIN_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"targetChain":"arbitrumSepolia","notes":"demo fallback"}'
+```
+
+Expected: `submitted` + `txHash`.
+
+In `testnet_hybrid`, if on-chain rebalance cannot execute, the API can return `simulated` when:
+
+```bash
+TESTNET_REBALANCE_SIMULATION=true
+```
+
+## 4. Phase 2: Mainnet Shadow (Live MiniKit Rail)
+
+### 4.1 Deploy capped shadow vault
+
+```bash
+cp scripts/deploy-mainnet-shadow.env.example .env.deploy.mainnet
+# edit .env.deploy.mainnet
+bash scripts/deploy-mainnet-shadow.sh .env.deploy.mainnet
+```
+
+Outputs:
+- `.env.deploy.mainnet.output`
+- `deployments/addresses.mainnet.json`
+- `deployments/allowlist.mainnet-shadow.json`
+
+### 4.2 Developer Portal allowlist
+
+Use `deployments/allowlist.mainnet-shadow.json` values:
+- `permit2Tokens` -> Configuration > Advanced > Permit2 Tokens
+- `contractEntrypoints` -> Configuration > Advanced > Contract Entrypoints
+
+### 4.3 Switch app mode to live
+
+```bash
+EXECUTION_MODE=mainnet_live
+NEXT_PUBLIC_EXECUTION_MODE=mainnet_live
+```
+
+In live mode, `/deposit` and `/withdraw` enable direct MiniKit transaction flow.
+
+## 5. World Sepolia Fallback
+
+If you need Mini App on World Sepolia only:
+
+1. Set `TESTNET_HOME_CHAIN_MODE=world` and `NEXT_PUBLIC_TESTNET_HOME_CHAIN_MODE=world`.
+2. Set testnet registry/env addresses to the World Sepolia vault deployment.
+3. Keep CRE simulation as proof path when CCIP lanes do not support the destination pair.
+
+## 6. Verification Gates
 
 - Contracts:
-  - `cd contracts && forge build && forge test`
+  - `cd contracts && forge test`
 - CRE:
-  - `npm run simulate:cre`
   - `cd services/cre-workflow/cre/omni-yield && bun test`
-- Mini App/API:
+  - `npm run simulate:cre:sync`
+- Mini app/API:
+  - `npm run typecheck -w @yield-cre/world-mini-app`
   - `npm run build -w @yield-cre/world-mini-app`
 
-## 5) Incident Notes
+## 7. Judge Demo Script (Timestamped)
 
-- If CRE reads fail, verify `services/cre-workflow/cre/project.yaml` RPC endpoints.
-- If rebalance route returns `skipped`, check missing envs in API logs.
-- If World ID fails during local demo, set `WORLD_ID_DEV_BYPASS=true` only in dev.
+- T+00:00: Open Mini App in World App, show `Execution Mode`.
+- T+00:20: World ID verify + wallet auth success.
+- T+00:45: Show dashboard cards: active chain, best chain, spread, latest decision.
+- T+01:10: Run admin deposit (testnet hybrid) and show returned tx hashes.
+- T+01:40: Run `/api/admin/sync`, refresh dashboard, show non-zero APY snapshots.
+- T+02:10: Run CRE simulate logs and show threshold/cooldown decision.
+- T+02:40: Trigger `/api/admin/rebalance`, show `submitted` txHash and latest action status.
+- T+03:10: Final dashboard refresh proving updated chain/action state.
+
+## 8. Guardrails
+
+- Keep `MAINNET_MAX_DEPOSIT_UNITS` low for demo.
+- Use `setDepositsPaused(true)` immediately if abnormal behavior occurs.
+- Never expose private keys in `NEXT_PUBLIC_*`.
+- Keep `WORLD_ID_DEV_BYPASS=false` during judged demo.

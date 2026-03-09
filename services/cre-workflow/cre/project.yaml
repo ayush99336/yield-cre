@@ -18,6 +18,8 @@ default: &default
   rpcs:
     - chain-name: ethereum-testnet-sepolia
       url: https://ethereum-sepolia-rpc.publicnode.com
+    - chain-name: ethereum-testnet-sepolia-base-1
+      url: https://sepolia.base.org
     - chain-name: polygon-testnet-amoy
       url: https://polygon-amoy-bor-rpc.publicnode.com
     - chain-name: ethereum-testnet-sepolia-arbitrum-1
